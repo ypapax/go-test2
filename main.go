@@ -4,12 +4,24 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"encoding/json"
+	"time"
+	"fmt"
 
 	"github.com/golang/glog"
+	mgo "gopkg.in/mgo.v2"
 )
 
 const apiVersion = "1"
-const dataURL = "http://www.neracoos.org/erddap/tabledap/E05_aanderaa_all.json?station%2Cmooring_site_desc%2Cwater_depth%2Ctime%2Ccurrent_speed%2Ccurrent_speed_qc%2Ccurrent_direction%2Ccurrent_direction_qc%2Ccurrent_u%2Ccurrent_u_qc%2Ccurrent_v%2Ccurrent_v_qc%2Ctemperature%2Ctemperature_qc%2Cconductivity%2Cconductivity_qc%2Csalinity%2Csalinity_qc%2Csigma_t%2Csigma_t_qc%2Ctime_created%2Ctime_modified%2Clongitude%2Clatitude%2Cdepth&time%3E=2015-08-25T15%3A00%3A00Z&time%3C=2016-12-05T14%3A00%3A00Z"
+
+var actions = map[string]bool{
+	"min": true,
+	"max": true,
+	"avg": true,
+	"":    true,
+}
+
+const reqDateLayout = "02/01/2006"
 
 func Launch(connStr, servePort string, endpoints []string) error {
 	if len(connStr) == 0 {
@@ -26,7 +38,7 @@ func Launch(connStr, servePort string, endpoints []string) error {
 		glog.Error(err)
 		return err
 	}
-	if err := FillDBIfEmpty(context.Session, dataURL); err != nil {
+	if err := fillDBIfEmpty(context.Session, dataURL); err != nil {
 		glog.Error(err)
 		return err
 	}
@@ -34,24 +46,104 @@ func Launch(connStr, servePort string, endpoints []string) error {
 	for _, ep := range endpoints {
 		epMap[ep] = true
 	}
-	http.HandleFunc("/api/v"+apiVersion, func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/test/api/v"+apiVersion+"/", func(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(r.URL.Path, "/")
-		if len(parts) != 3 {
+		glog.V(4).Infof("parts %+v, len(parts) = %+v", parts, len(parts))
+		if len(parts) != 5 && len(parts) != 6 {
+			glog.V(4).Infof("not supported endpoint")
 			http.Error(w, "not supported endpoint", http.StatusNotFound)
 			return
 		}
+		parts = parts[2:]
 		ep := parts[2]
 		if _, ok := epMap[ep]; !ok {
+			glog.V(4).Infof("not supported endpoint")
 			http.Error(w, "not supported endpoint", http.StatusNotFound)
 			return
 		}
-		_ = context
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte("ok"))
+		var aggr string
+		if len(parts) > 3 {
+			aggr = parts[3]
+		}
+		if _, ok := actions[aggr]; !ok {
+			glog.V(4).Infof("not supported endpoint")
+			http.Error(w, "not supported endpoint", http.StatusNotFound)
+			return
+		}
+		s := context.Session.Copy()
+		defer s.Close()
+		start, err := dateParse(r, "start")
+		if err != nil {
+			http.Error(w, "unable to parse date for start parameter", http.StatusBadRequest)
+			return
+		}
+		stop, err := dateParse(r, "stop")
+		if err != nil {
+			http.Error(w, "unable to parse date for stop parameter", http.StatusBadRequest)
+			return
+		}
+		var rslt interface{}
+		switch aggr {
+		case "":
+			rslt, err = find(s, ep, start, stop)
+
+		default:
+			rslt, err = aggregate(s, ep, aggr, start, stop)
+		}
+		if err != nil && err != mgo.ErrNotFound {
+			glog.Errorf("%+v for %+v %+v %+v %+v", ep, aggr, start, stop)
+			http.Error(w, "internal service error", http.StatusInternalServerError)
+			return
+		}
+		glog.V(4).Infof("rs %+v", rslt)
+		if err == mgo.ErrNotFound {
+			bnds, err := getBounds(s)
+			if err != nil {
+				glog.Error(err)
+				writeResp(&errorResp{Error: "Out of bounds. Internal error in getting supported date bounds."}, w)
+				return
+			}
+			writeResp(&errorResp{
+				Error: fmt.Sprintf("Out of bounds. Supported bounds: start=%+v stop=%+v",
+					bnds.Min.Format(reqDateLayout), bnds.Max.Format(reqDateLayout))}, w)
+			return
+		}
+		glog.V(4).Infof("rs %+v", rslt)
+		writeResp(rslt, w)
 
 	})
+	glog.Infof("listening " + servePort)
 	if err := http.ListenAndServe(":"+servePort, nil); err != nil {
 		glog.Error(err)
 	}
+	return nil
+}
+
+func dateParse(r *http.Request, paramName string) (*time.Time, error) {
+	param := r.URL.Query()[paramName]
+	if len(param) == 0 {
+		return nil, nil
+	}
+	t, err := time.Parse(reqDateLayout, param[0])
+	if err != nil {
+		glog.Error(err)
+		return nil, err
+	}
+	return &t, nil
+}
+
+type errorResp struct {
+	Error string `json:"error"`
+}
+
+func writeResp(obj interface{}, w http.ResponseWriter) error {
+	b, err := json.Marshal(obj)
+	if err != nil {
+		glog.Error(err)
+		http.Error(w, "internal service error", http.StatusInternalServerError)
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(b)
 	return nil
 }
