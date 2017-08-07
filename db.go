@@ -27,9 +27,7 @@ var timeFields = map[string]bool{
 
 const timeLayout = time.RFC3339
 
-//ds.Session.Copy()
-
-func NewContext(dialStr string) (*Context, error) {
+func newContext(dialStr string) (*Context, error) {
 	session, err := mgo.Dial(dialStr)
 	if err != nil {
 		glog.Error(err)
@@ -45,11 +43,13 @@ func find(s *mgo.Session, field string, start, stop *time.Time) ([]map[string]in
 	pipe := matchPipe(field, start, stop)
 	project := map[string]interface{}{
 		"_id": 0,
-		"time": 1,
 	}
+	project[timeField] = 1
 	project[field] = 1
 	pipe = append(pipe, map[string]interface{}{"$project": project})
-	pipe = append(pipe, map[string]interface{}{"$sort": map[string]interface{}{"time": -1}})
+	srt := make(map[string]interface{})
+	srt[timeField] = -1
+	pipe = append(pipe, map[string]interface{}{"$sort": srt})
 	if err := collection(s).Pipe(pipe).All(&rslt); err != nil {
 		return nil, err
 	}
@@ -163,6 +163,17 @@ func fillDB(s *mgo.Session, url string) error {
 	return nil
 }
 
+func ensureIndeces(s *mgo.Session, inds []mgo.Index) error {
+	for _, ind := range inds {
+		glog.V(4).Infof("ensure index %+v", ind)
+		if err := collection(s).EnsureIndex(ind); err != nil {
+			glog.Error(err)
+			return err
+		}
+	}
+	return nil
+}
+
 type respData struct {
 	Table table `json:"table"`
 }
@@ -172,19 +183,25 @@ type table struct {
 	Rows        [][]interface{} `json:"rows"`
 }
 
-func getBounds(s *mgo.Session) (*bounds, error) {
+func getBounds(s *mgo.Session, ep string) (*bounds, error) {
 	var bnds bounds
-	if err := collection(s).Pipe([]interface{}{map[string]map[string]map[string]string{
-		"$group": map[string]map[string]string{
-			"_id": nil,
-			"min": map[string]string{
-				"$min": "$time",
-			},
-			"max": map[string]string{
-				"$max": "$time",
-			},
+	match := make(map[string]interface{})
+	match[ep+qcSuffix] = 0
+	if err := collection(s).Pipe([]interface{}{
+		map[string]map[string]interface{}{
+			"$match": match,
 		},
-	}}).One(&bnds); err != nil {
+		map[string]map[string]map[string]string{
+			"$group": map[string]map[string]string{
+				"_id": nil,
+				"min": map[string]string{
+					"$min": "$time",
+				},
+				"max": map[string]string{
+					"$max": "$time",
+				},
+			},
+		}}).One(&bnds); err != nil {
 		glog.Error(err)
 		return nil, err
 	}

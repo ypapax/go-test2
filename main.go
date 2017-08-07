@@ -1,12 +1,12 @@
 package go_test2
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
-	"encoding/json"
 	"time"
-	"fmt"
 
 	"github.com/golang/glog"
 	mgo "gopkg.in/mgo.v2"
@@ -33,7 +33,7 @@ func Launch(connStr, servePort string, endpoints []string) error {
 	if len(endpoints) == 0 {
 		return errors.New("at least one endpoint is required")
 	}
-	context, err := NewContext(connStr)
+	context, err := newContext(connStr)
 	if err != nil {
 		glog.Error(err)
 		return err
@@ -43,8 +43,15 @@ func Launch(connStr, servePort string, endpoints []string) error {
 		return err
 	}
 	epMap := make(map[string]bool)
+	dbIndices := []mgo.Index{{Key: []string{timeField}}}
 	for _, ep := range endpoints {
 		epMap[ep] = true
+		dbIndices = append(dbIndices, mgo.Index{Key: []string{ep + qcSuffix, timeField, ep}})
+		dbIndices = append(dbIndices, mgo.Index{Key: []string{ep + qcSuffix, ep}})
+	}
+	if err := ensureIndeces(context.Session, dbIndices); err != nil {
+		glog.Error(err)
+		return err
 	}
 	http.HandleFunc("/test/api/v"+apiVersion+"/", func(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(r.URL.Path, "/")
@@ -97,7 +104,7 @@ func Launch(connStr, servePort string, endpoints []string) error {
 		}
 		glog.V(4).Infof("rs %+v", rslt)
 		if err == mgo.ErrNotFound {
-			bnds, err := getBounds(s)
+			bnds, err := getBounds(s, ep)
 			if err != nil {
 				glog.Error(err)
 				writeResp(&errorResp{Error: "Out of bounds. Internal error in getting supported date bounds."}, w)
