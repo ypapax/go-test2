@@ -100,7 +100,7 @@ func Launch(connStr, servePort string, endpoints []string) error {
 			rslt, err = aggregate(s, ep, aggr, start, stop)
 		}
 		if err != nil && err != mgo.ErrNotFound {
-			glog.Errorf("%+v for %+v %+v %+v %+v", ep, aggr, start, stop)
+			glog.Errorf("%+v for %+v %+v %+v %+v", err, ep, aggr, start, stop)
 			http.Error(w, "internal service error", http.StatusInternalServerError)
 			return
 		}

@@ -90,7 +90,7 @@ func aggregate(s *mgo.Session, field, action string, start, stop *time.Time) (*r
 }
 
 type result struct {
-	Result float64 `json:"result",bson:"result"`
+	Result float64 `json:"result" bson:"result"`
 }
 
 type Context struct {
