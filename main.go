@@ -23,6 +23,8 @@ var actions = map[string]bool{
 
 const reqDateLayout = "02/01/2006"
 
+
+// Launch starts the microservice serving endpoints slice at port servePort connection to mongo db using connection string connStr.
 func Launch(connStr, servePort string, endpoints []string) error {
 	if len(connStr) == 0 {
 		return errors.New("connections string is required")
