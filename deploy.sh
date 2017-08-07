@@ -33,6 +33,7 @@ serviceName=go-test2
 binLocal=/tmp/$serviceName
 pushd $GOPATH/src/github.com/ypapax/$serviceName
 pushd apps/$serviceName
+go get ./...
 GOOS=linux GOARCH=amd64 go build -o $binLocal
 popd
 remoteDir='~/go/go-test2'
