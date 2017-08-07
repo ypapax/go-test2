@@ -1,5 +1,27 @@
 # go-test2
 
+## endpoints
+```
+curl -sS localhost:8181/test/api/v1/temperature/max?start=01/01/2016
+{"result":19.601141}
+
+curl -sS localhost:8181/test/api/v1/current_speed/avg
+{"result":21.631215155609603}
+
+curl -sS localhost:8181/test/api/v1/temperature/min?start=01/01/2016&stop=01/01/2017
+{"result":6.325187}
+
+curl -sS localhost:8181/test/api/v1/fake_ep/fake?stop=01/01/2006
+not supported endpoint
+
+curl -sS localhost:8181/test/api/v1/current_speed?start=01/01/2016&stop=05/12/2016
+[{"current_speed":19.3578,"time":"2016-12-05T03:00:00+03:00"},{"current_speed":22.8774,"time":"2016-12-05T02:40:00+03:00"},{"current_speed":24.6372,"time":"2016-12-05T02:20:00+03:00"},{"current_speed"...
+
+curl -sS localhost:8181/test/api/v1/current_speed?stop=01/01/2006
+{"error":"Out of bounds. Supported bounds: start=25/08/2015 stop=05/12/2016"}
+```
+
+
 ## deploy
 ```
 $GOPATH/src/github.com/ypapax/go-test2/deploy.sh user host port mongoConnectionString
