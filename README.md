@@ -1,4 +1,15 @@
-# go-test2
+# Task
+This test is intended to test your ability to write a complete micro-service backend. This service should be capable of serving the dataset you downloaded from NERACOOS via a RESTful API. For this test you can use either Python or GO and a database of your choice (e.g., MySQL, Postgres, etc.). Additionally, the service should be accessible at [your.domain.com]/test/api/v1. If you do not have a domain name an IP address will be sufficient. All data should be served as json containing appropriate results when available and an accompanying error message when appropriate. The json attribute names are up to you.
+
+Your service should include the following API endpoints:
+
+1) current_speed,
+2) temperature,
+
+All endpoints should be able to filter results based on the presence of the parameters start, stop, min, max and avg. For example, the endpoint your.domain.com/test/api/v1/current_speed?start=01/01/2016 should return all current speed records since 01/01/2016 whereas the endpoint your.domain.com/test/api/v1/current_speed/min?start=01/01/2016 should return the min current speed since 01/01/2016. Be sure to check those _qc values :-).
+
+Your service should handle and respond to reasonable errors accordingly. By reasonable we mean dates that are out of bounds or passing parameters that are not supported (e.g., your.domain.com/api/v1/current_speed/unsupported_foo?stop=01/01/2016). Of course, your service should provide appropriate responses (e.g., 404) for endpoints that do not exist.
+# Solution
 
 ## endpoints
 ```
